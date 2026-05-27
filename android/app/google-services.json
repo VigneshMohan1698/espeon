@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "90269352050",
+    "project_id": "espeon-a41a2",
+    "storage_bucket": "espeon-a41a2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:90269352050:android:9fce0d4be19f037ba8c2eb",
+        "android_client_info": {
+          "package_name": "com.dobby.espeon"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDmBYW_FN6x89BlYP1tRK3zk4QorYHp--A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
