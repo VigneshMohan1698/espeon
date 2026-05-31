@@ -54,6 +54,9 @@ dependencies:
   # Utilities
   flutter_svg: ^2.0.10+1      # SVG icons (Google, Apple logos)
   intl: ^0.19.0               # Date/currency formatting
+  shared_preferences: ^2.3.0  # Local device storage
+  flutter_markdown: ^0.7.7+1
+  dio: ^5.9.2
 
 dev_dependencies:
   flutter_test:

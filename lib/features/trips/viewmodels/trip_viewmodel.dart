@@ -22,10 +22,15 @@ class TripViewModel extends ChangeNotifier {
     return _db
         .collection('trips')
         .where('memberIds', arrayContains: uid)
-        .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snapshot) =>
-            snapshot.docs.map((doc) => Trip.fromFirestore(doc)).toList());
+        .map((snapshot) {
+          final trips = snapshot.docs
+              .map((doc) => Trip.fromFirestore(doc))
+              .toList();
+          // Sort locally — avoids needing a Firestore composite index
+          trips.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return trips;
+        });
   }
 
   // ── Create a new trip ────────────────────────────────────────────
@@ -69,6 +74,37 @@ class TripViewModel extends ChangeNotifier {
       await _db.collection('trips').doc(tripId).delete();
     } catch (e) {
       debugPrint('Error deleting trip: $e');
+    }
+  }
+
+  // ── Add a member to a trip by email ─────────────────────────────
+  // Returns an error string if something goes wrong, null on success.
+  Future<String?> addMemberByEmail(Trip trip, String email) async {
+    try {
+      final query = await _db
+          .collection('users')
+          .where('email', isEqualTo: email.trim().toLowerCase())
+          .limit(1)
+          .get();
+
+      if (query.docs.isEmpty) {
+        return 'No user found with that email. They need to sign up first.';
+      }
+
+      final invitedUid = query.docs.first.id;
+
+      if (trip.memberIds.contains(invitedUid)) {
+        return 'This person is already in the trip.';
+      }
+
+      await _db.collection('trips').doc(trip.id).update({
+        'memberIds': FieldValue.arrayUnion([invitedUid]),
+      });
+
+      return null; // success
+    } catch (e) {
+      debugPrint('Invite error: $e');
+      return 'Something went wrong. Try again.';
     }
   }
 }

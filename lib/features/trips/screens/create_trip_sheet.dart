@@ -1,5 +1,9 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
+import '../../../core/config/secrets.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
@@ -18,10 +22,15 @@ class _CreateTripSheetState extends State<CreateTripSheet> {
   DateTime? _startDate;
   DateTime? _endDate;
 
+  List<Map<String, String>> _suggestions = [];
+  bool _showSuggestions = false;
+  Timer? _debounce;
+
   @override
   void dispose() {
     _nameController.dispose();
     _destinationController.dispose();
+    _debounce?.cancel();
     super.dispose();
   }
 
@@ -30,6 +39,69 @@ class _CreateTripSheetState extends State<CreateTripSheet> {
       _destinationController.text.trim().isNotEmpty &&
       _startDate != null &&
       _endDate != null;
+
+  Future<void> _fetchSuggestions(String input) async {
+    if (input.isEmpty) {
+      setState(() {
+        _suggestions = [];
+        _showSuggestions = false;
+      });
+      return;
+    }
+
+    try {
+      final url = Uri.parse(
+        'https://places.googleapis.com/v1/places:autocomplete',
+      );
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': Secrets.googlePlacesApiKey,
+        },
+        body: jsonEncode({
+          'input': input,
+          'includedPrimaryTypes': ['locality', 'country', 'administrative_area_level_1'],
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final suggestions = (data['suggestions'] as List? ?? [])
+            .map((s) {
+              final prediction = s['placePrediction'];
+              return {
+                'description': prediction['text']['text'] as String,
+                'placeId': prediction['placeId'] as String,
+              };
+            })
+            .toList();
+
+        setState(() {
+          _suggestions = List<Map<String, String>>.from(suggestions);
+          _showSuggestions = suggestions.isNotEmpty;
+        });
+      }
+    } catch (e) {
+      debugPrint('Places error: $e');
+    }
+  }
+
+  void _onDestinationChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      _fetchSuggestions(value);
+    });
+    setState(() {});
+  }
+
+  void _selectSuggestion(String description) {
+    _destinationController.text = description;
+    setState(() {
+      _suggestions = [];
+      _showSuggestions = false;
+    });
+  }
 
   Future<void> _pickDate({required bool isStart}) async {
     final now = DateTime.now();
@@ -114,7 +186,7 @@ class _CreateTripSheetState extends State<CreateTripSheet> {
           ),
           const SizedBox(height: AppSpacing.md),
 
-          // ── Destination ───────────────────────────────────────
+          // ── Destination with autocomplete ─────────────────────
           TextField(
             controller: _destinationController,
             textCapitalization: TextCapitalization.words,
@@ -122,8 +194,52 @@ class _CreateTripSheetState extends State<CreateTripSheet> {
               hintText: 'Destination (e.g. Paris, France)',
               prefixIcon: Icon(Icons.location_on_outlined),
             ),
-            onChanged: (_) => setState(() {}),
+            onChanged: _onDestinationChanged,
           ),
+
+          // ── Suggestions dropdown ──────────────────────────────
+          if (_showSuggestions)
+            Container(
+              margin: const EdgeInsets.only(top: AppSpacing.xs),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                border: Border.all(color: AppColors.divider),
+                boxShadow: const [
+                  BoxShadow(
+                    color: AppColors.shadow,
+                    blurRadius: 8,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                padding: EdgeInsets.zero,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: _suggestions.length,
+                separatorBuilder: (_, __) =>
+                    const Divider(height: 1, indent: AppSpacing.md),
+                itemBuilder: (context, index) {
+                  final suggestion = _suggestions[index];
+                  return Material(
+                    color: AppColors.surface,
+                    child: ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.location_on_outlined,
+                          size: 18, color: AppColors.textSecondary),
+                      title: Text(
+                        suggestion['description']!,
+                        style: AppTypography.bodyMedium,
+                      ),
+                      onTap: () =>
+                          _selectSuggestion(suggestion['description']!),
+                    ),
+                  );
+                },
+              ),
+            ),
+
           const SizedBox(height: AppSpacing.md),
 
           // ── Date pickers ──────────────────────────────────────

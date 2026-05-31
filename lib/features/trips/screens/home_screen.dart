@@ -9,6 +9,7 @@ import '../viewmodels/trip_viewmodel.dart';
 import '../models/trip.dart';
 import '../widgets/trip_card.dart';
 import 'create_trip_sheet.dart';
+import 'trip_detail_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -39,10 +40,7 @@ class HomeScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // ── Greeting ─────────────────────────────────────────
-              Text(
-                'Hey $firstName 👋',
-                style: AppTypography.displayMedium,
-              ),
+              Text('Hey $firstName 👋', style: AppTypography.displayMedium),
               const SizedBox(height: AppSpacing.xs),
               Text(
                 'Where are you headed next?',
@@ -65,6 +63,11 @@ class HomeScreen extends StatelessWidget {
                       return const Center(child: CircularProgressIndicator());
                     }
 
+                    if (snapshot.hasError) {
+                      debugPrint('Firestore stream error: ${snapshot.error}');
+                      return Center(child: Text('Error: ${snapshot.error}'));
+                    }
+
                     final trips = snapshot.data ?? [];
 
                     if (trips.isEmpty) {
@@ -75,10 +78,61 @@ class HomeScreen extends StatelessWidget {
 
                     return ListView.separated(
                       itemCount: trips.length,
-                      separatorBuilder: (_, __) =>
+                      separatorBuilder: (_, _) =>
                           const SizedBox(height: AppSpacing.md),
-                      itemBuilder: (context, index) =>
-                          TripCard(trip: trips[index]),
+                      itemBuilder: (context, index) {
+                        final trip = trips[index];
+                        return Dismissible(
+                          key: ValueKey(trip.id),
+                          direction: DismissDirection.endToStart,
+                          background: Container(
+                            alignment: Alignment.centerRight,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.lg),
+                            decoration: BoxDecoration(
+                              color: AppColors.error,
+                              borderRadius:
+                                  BorderRadius.circular(AppSpacing.radiusLg),
+                            ),
+                            child: const Icon(Icons.delete_outline,
+                                color: Colors.white, size: 24),
+                          ),
+                          confirmDismiss: (_) async {
+                            return await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: const Text('Delete Trip'),
+                                content: Text(
+                                    'Delete "${trip.name}"? This cannot be undone.'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.pop(ctx, false),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.pop(ctx, true),
+                                    style: TextButton.styleFrom(
+                                        foregroundColor: AppColors.error),
+                                    child: const Text('Delete'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                          onDismissed: (_) => tripVM.deleteTrip(trip.id),
+                          child: TripCard(
+                            trip: trip,
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => TripDetailScreen(trip: trip),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
                     );
                   },
                 ),
@@ -122,7 +176,11 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.luggage_rounded, size: 72, color: AppColors.textHint),
+          const Icon(
+            Icons.luggage_rounded,
+            size: 72,
+            color: AppColors.textHint,
+          ),
           const SizedBox(height: AppSpacing.md),
           const Text('No trips yet', style: AppTypography.headingMedium),
           const SizedBox(height: AppSpacing.sm),

@@ -63,7 +63,7 @@ class LoginScreen extends StatelessWidget {
               SocialLoginButton(
                 label: 'Continue with Google',
                 iconAsset: 'assets/icons/google.svg',
-                isLoading: auth.status == AuthStatus.loading,
+                isLoading: auth.loadingMethod == AuthMethod.google,
                 onTap: () => auth.signInWithGoogle(),
               ),
               const SizedBox(height: AppSpacing.sm),
@@ -71,7 +71,7 @@ class LoginScreen extends StatelessWidget {
               SocialLoginButton(
                 label: 'Continue with Apple',
                 iconAsset: 'assets/icons/apple.svg',
-                isLoading: auth.status == AuthStatus.loading,
+                isLoading: auth.loadingMethod == AuthMethod.apple,
                 onTap: () => auth.signInWithApple(),
               ),
               const SizedBox(height: AppSpacing.sm),
@@ -94,7 +94,7 @@ class LoginScreen extends StatelessWidget {
               const SizedBox(height: AppSpacing.sm),
 
               OutlinedButton(
-                onPressed: auth.status == AuthStatus.loading
+                onPressed: auth.loadingMethod != AuthMethod.none
                     ? null
                     : () => Navigator.push(
                           context,

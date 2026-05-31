@@ -1,22 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 enum AuthStatus { idle, loading, success, error }
+enum AuthMethod { google, apple, email, none }
 
 class AuthViewModel extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     clientId: '90269352050-9g1q4rqde11bqooqk81nkqdker3b4100.apps.googleusercontent.com',
   );
 
   AuthStatus status = AuthStatus.idle;
+  AuthMethod loadingMethod = AuthMethod.none;
   String? errorMessage;
   User? get currentUser => _auth.currentUser;
 
   // ── Google Sign-In ──────────────────────────────────────────────
   Future<void> signInWithGoogle() async {
-    _setLoading();
+    _setLoading(AuthMethod.google);
     try {
       final googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
@@ -28,7 +32,8 @@ class AuthViewModel extends ChangeNotifier {
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
-      await _auth.signInWithCredential(credential);
+      final result = await _auth.signInWithCredential(credential);
+      if (result.user != null) await _saveUserProfile(result.user!);
       _setSuccess();
     } catch (e) {
       _setError('Google sign-in failed. Please try again.');
@@ -37,10 +42,11 @@ class AuthViewModel extends ChangeNotifier {
 
   // ── Apple Sign-In ───────────────────────────────────────────────
   Future<void> signInWithApple() async {
-    _setLoading();
+    _setLoading(AuthMethod.apple);
     try {
       final appleProvider = AppleAuthProvider();
-      await _auth.signInWithProvider(appleProvider);
+      final result = await _auth.signInWithProvider(appleProvider);
+      if (result.user != null) await _saveUserProfile(result.user!);
       _setSuccess();
     } catch (e) {
       _setError('Apple sign-in failed. Please try again.');
@@ -49,9 +55,10 @@ class AuthViewModel extends ChangeNotifier {
 
   // ── Email & Password ────────────────────────────────────────────
   Future<void> signInWithEmail(String email, String password) async {
-    _setLoading();
+    _setLoading(AuthMethod.email);
     try {
-      await _auth.signInWithEmailAndPassword(email: email, password: password);
+      final result = await _auth.signInWithEmailAndPassword(email: email, password: password);
+      if (result.user != null) await _saveUserProfile(result.user!);
       _setSuccess();
     } on FirebaseAuthException catch (e) {
       debugPrint('Email sign-in FirebaseAuthException: ${e.code} — ${e.message}');
@@ -63,10 +70,11 @@ class AuthViewModel extends ChangeNotifier {
   }
 
   Future<void> createAccountWithEmail(String email, String password) async {
-    _setLoading();
+    _setLoading(AuthMethod.email);
     try {
-      await _auth.createUserWithEmailAndPassword(
+      final result = await _auth.createUserWithEmailAndPassword(
           email: email, password: password);
+      if (result.user != null) await _saveUserProfile(result.user!);
       _setSuccess();
     } on FirebaseAuthException catch (e) {
       debugPrint('Email sign-up FirebaseAuthException: ${e.code} — ${e.message}');
@@ -84,25 +92,38 @@ class AuthViewModel extends ChangeNotifier {
     _setIdle();
   }
 
+  // ── Save user profile to Firestore ──────────────────────────────
+  Future<void> _saveUserProfile(User user) async {
+    await _db.collection('users').doc(user.uid).set({
+      'email': user.email ?? '',
+      'displayName': user.displayName ?? user.email?.split('@').first ?? 'Traveler',
+      'photoUrl': user.photoURL,
+    }, SetOptions(merge: true)); // merge: true won't overwrite existing data
+  }
+
   // ── Helpers ─────────────────────────────────────────────────────
-  void _setLoading() {
+  void _setLoading(AuthMethod method) {
     status = AuthStatus.loading;
+    loadingMethod = method;
     errorMessage = null;
     notifyListeners();
   }
 
   void _setSuccess() {
     status = AuthStatus.success;
+    loadingMethod = AuthMethod.none;
     notifyListeners();
   }
 
   void _setIdle() {
     status = AuthStatus.idle;
+    loadingMethod = AuthMethod.none;
     notifyListeners();
   }
 
   void _setError(String message) {
     status = AuthStatus.error;
+    loadingMethod = AuthMethod.none;
     errorMessage = message;
     notifyListeners();
   }
